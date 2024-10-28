@@ -4,6 +4,10 @@ __pycache__/
 *$py.class
 
 /output/
+/output-legacy/
+/sample_images/
+*.png
+*.pth
 
 # C extensions
 *.so

@@ -1,8 +1,9 @@
 import torch
 from .models import Encoder, Decoder, EncoderDecoder
-from .preprocess import train_loader, valid_loader
+from .preprocess import train_loader
 from torch import nn, optim
 import matplotlib.pyplot as plt
+from torchvision.utils import save_image
 
 # Hyperparameters
 latent_dim = 128
@@ -26,7 +27,7 @@ for epoch in range(num_epochs):
     model.train()
     train_loss = 0.0
     for batch in train_loader:
-        images = batch['image'].to(device)
+        images = batch['images'].to(device)
         
         # Forward pass
         outputs = model(images)
@@ -38,17 +39,25 @@ for epoch in range(num_epochs):
         optimizer.step()
         
         train_loss += loss.item()
-        train_losses.append(train_loss)
 
     # Calculate average loss over the epoch
     train_loss /= len(train_loader)
+    train_losses.append(train_loss)
+    
+    # sample images
+    sample_images = images[:8]  # Take the first 8 images
+    sample_outputs = outputs[:8]  # Corresponding reconstructed images
+    
+    save_image(sample_images, f'./ChangJae-RnE/sample_images/original_epoch_{epoch + 1}.png')
+    save_image(sample_outputs, f'./ChangJae-RnE/sample_images/reconstructed_epoch_{epoch + 1}.png')
+
 
     
     
     print(f'Epoch [{epoch + 1}/{num_epochs}], Train Loss: {train_loss:.4f}')
 
 # Save the model parameters
-torch.save(model.state_dict(), "encoder_decoder.pth")
+torch.save(model.state_dict(), "./ChangJae-RnE/encoder_decoder.pth")
 
 
 # Plot the training and validation loss
@@ -58,4 +67,4 @@ plt.title('Training Loss')
 plt.xlabel('Epoch')
 plt.ylabel('Loss')
 plt.legend()
-plt.show() 
+plt.savefig('./ChangJae-RnE/ed.png')

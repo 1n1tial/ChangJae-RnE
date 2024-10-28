@@ -3,6 +3,7 @@ from .config import TrainingConfig
 from torchvision import transforms
 import torch
 
+
 config = TrainingConfig()
 config.dataset_name = "huggan/smithsonian_butterflies_subset"
 dataset = load_dataset(config.dataset_name, split="train")
@@ -23,4 +24,5 @@ def transform(examples):
 
 dataset.set_transform(transform)
 
-train_dataloader = torch.utils.data.DataLoader(dataset, batch_size=config.train_batch_size, shuffle=True)
+
+train_loader = torch.utils.data.DataLoader(dataset, batch_size=config.train_batch_size, shuffle=True)

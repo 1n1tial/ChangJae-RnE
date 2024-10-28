@@ -3,6 +3,8 @@ import torch.nn as nn
 from diffusers import UNet2DModel
 from .config import TrainingConfig
 
+
+
 model = UNet2DModel(
     sample_size=TrainingConfig.image_size,  # the target image resolution
     in_channels=3,  # the number of input channels, 3 for RGB images
@@ -66,16 +68,22 @@ class EncoderDecoder(nn.Module):
     def forward(self, x):
         return self.decoder(self.encoder(x))
     
-latent_dim = 256
-encoder = Encoder(in_channels=3, latent_dim=latent_dim)
-decoder = Decoder(latent_dim=latent_dim, out_channels=3)
-ed_model = EncoderDecoder(in_channels=3, latent_dim=latent_dim, out_channels=3)
+# latent_dim = 256
+# encoder = Encoder(in_channels=3, latent_dim=latent_dim)
+# decoder = Decoder(latent_dim=latent_dim, out_channels=3)
+# ed_model = EncoderDecoder(in_channels=3, latent_dim=latent_dim, out_channels=3)
 
 class CustomUNet2DModel(UNet2DModel):
     def __init__(self, encoder, decoder, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.encoder = encoder
         self.decoder = decoder
+        
+        # to unfreeze the encoder and decoder, set requires_grad=True
+        for param in self.encoder.parameters():
+            param.requires_grad = False
+        for param in self.decoder.parameters():
+            param.requires_grad = False
 
     def forward(self, x, timesteps, *args, **kwargs):
         # Encode the input
@@ -90,9 +98,17 @@ class CustomUNet2DModel(UNet2DModel):
         return decoded_output, 0
 
 # Instantiate the encoder, UNet model (with appropriate params), and decoder
-latent_dim = 256
-encoder = Encoder(in_channels=3, latent_dim=latent_dim)
-decoder = Decoder(latent_dim=latent_dim, out_channels=3)
+latent_dim = 128
+# encoder = Encoder(in_channels=3, latent_dim=latent_dim)
+# decoder = Decoder(latent_dim=latent_dim, out_channels=3)
+
+# load the pretrained encoder-decoder model
+encoder_decoder_model = EncoderDecoder(in_channels=3, latent_dim=latent_dim, out_channels=3)
+encoder_decoder_model.load_state_dict(torch.load("./ChangJae-RnE/encoder_decoder.pth"))
+encoder_decoder_model.eval()
+
+encoder = encoder_decoder_model.encoder
+decoder = encoder_decoder_model.decoder
 
 # Define the UNet2D model with appropriate parameters (e.g., resolution, number of channels, etc.)
 model2 = CustomUNet2DModel(
@@ -124,6 +140,6 @@ from diffusers import DDPMScheduler
 
 noise_scheduler = DDPMScheduler(num_train_timesteps=1000)
 
-optimizer = torch.optim.AdamW(model2.parameters(), lr=TrainingConfig.learning_rate)
+optimizer = torch.optim.AdamW(model.parameters(), lr=TrainingConfig.learning_rate)
 
 print(sum(p.numel() for p in model.parameters()), sum(p.numel() for p in model2.parameters()))

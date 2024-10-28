@@ -1,5 +1,7 @@
-from .models import model, model2, noise_scheduler, optimizer
-from .preprocess import *
+import torch
+
+from .preprocess import train_loader, config
+from .models import *
 from diffusers.optimization import get_cosine_schedule_with_warmup
 from PIL import Image
 import os
@@ -9,12 +11,15 @@ from tqdm.auto import tqdm
 from pathlib import Path
 import torch.nn.functional as F
 from diffusers import DDPMPipeline
+import torch
+import matplotlib.pyplot as plt
+
 
 
 lr_scheduler = get_cosine_schedule_with_warmup(
     optimizer=optimizer,
     num_warmup_steps=config.lr_warmup_steps,
-    num_training_steps=(len(train_dataloader) * config.num_epochs),
+    num_training_steps=(len(train_loader) * config.num_epochs),
 )
 
 
@@ -51,7 +56,7 @@ def get_full_repo_name(model_id: str, organization: str = None, token: str = Non
     else:
         return f"{organization}/{model_id}"
 
-def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_scheduler):
+def train_loop(config, model, noise_scheduler, optimizer, train_loader, lr_scheduler):
     # Initialize accelerator and tensorboard logging
     accelerator = Accelerator(
         mixed_precision=config.mixed_precision,
@@ -70,18 +75,19 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
     # Prepare everything
     # There is no specific order to remember, you just need to unpack the 
     # objects in the same order you gave them to the prepare method.
-    model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-        model, optimizer, train_dataloader, lr_scheduler
+    model, optimizer, train_loader, lr_scheduler = accelerator.prepare(
+        model, optimizer, train_loader, lr_scheduler
     )
     
     global_step = 0
-
+    train_losses = []
+    
     # Now you train the model
     for epoch in range(config.num_epochs):
-        progress_bar = tqdm(total=len(train_dataloader), disable=not accelerator.is_local_main_process)
+        progress_bar = tqdm(total=len(train_loader), disable=not accelerator.is_local_main_process)
         progress_bar.set_description(f"Epoch {epoch}")
 
-        for step, batch in enumerate(train_dataloader):
+        for step, batch in enumerate(train_loader):
             clean_images = batch['images']
             # Sample noise to add to the images
             noise = torch.randn(clean_images.shape).to(clean_images.device)
@@ -107,6 +113,7 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
             
             progress_bar.update(1)
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0], "step": global_step}
+            train_losses.append(loss.detach().item())
             progress_bar.set_postfix(**logs)
             accelerator.log(logs, step=global_step)
             global_step += 1
@@ -123,8 +130,16 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
                     repo.push_to_hub(commit_message=f"Epoch {epoch}", blocking=True)
                 else:
                     pipeline.save_pretrained(config.output_dir) 
+    
+    plt.figure(figsize=(10, 5))
+    plt.plot(train_losses, label='Train Loss')
+    plt.title('Training Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.savefig('./ChangJae-RnE/simple-diffusion.png')
                     
 from accelerate import notebook_launcher
-args = (config, model2, noise_scheduler, optimizer, train_dataloader, lr_scheduler)
+args = (config, model, noise_scheduler, optimizer, train_loader, lr_scheduler)
 
-notebook_launcher(train_loop, args, num_processes=2)
+notebook_launcher(train_loop, args, num_processes=4)
